@@ -4,7 +4,7 @@ import time
 from datetime import datetime
 import matplotlib.pyplot as plt
 
-BATCH_SIZE = 40
+BATCH_SIZE = 5
 
 with tf.name_scope("input"):
   jpg = tf.image.decode_jpeg(open('brick.jpg', 'r').read())
@@ -72,53 +72,48 @@ answers = tf.concat(0, [
 ])
 
 with tf.name_scope("adv") as scope:
-  al = utils._conv(adv_inp, 3, 3, 15)
+  al = utils._conv(adv_inp, 5, 5, 10)
   al = utils._half(al)
   al = utils._conv(al, 3, 3, 15)
   al = utils._half(al)
-  al = utils._conv(al, 3, 3, 15)
+  al = utils._conv(al, 3, 3, 25)
   al = utils._half(al)
-  al = utils._conv(al, 3, 3, 15)
+  al = utils._conv(al, 3, 3, 25)
   al = utils._half(al)
-  al = utils._conv(al, 3, 3, 15)
+  al = utils._conv(al, 3, 3, 35)
   al = utils._half(al)
-  al = utils._conv(al, 3, 3, 15)
+  al = utils._conv(al, 3, 3, 35)
   al = utils._fc(al, 2)
   al = tf.nn.softmax(al)
 
 
-cross_entropy = -tf.reduce_sum(answers*tf.log(tf.clip_by_value(al, 1e-10, 1.0))) / BATCH_SIZE
-
-tf.scalar_summary("cross_entropy", cross_entropy)
-
-opt = tf.train.AdagradOptimizer(1e-2)
-
-# Compute the gradients for a list of variables.
-grads_and_vars = opt.compute_gradients(cross_entropy)
+def normclip(grads_and_vars):
+  #for g,v in grads_and_vars:
+  #  print "G: " + str(g)
+  #  print "V: " + str(v.name)
+  return grads_and_vars
+  return [ (tf.clip_by_norm(g, 1.0),v) for g, v in grads_and_vars]
 
 
-#for g,v in grads_and_vars:
-#  print "G: " + str(g)
-#  print "V: " + str(v.name)
+adv_entropy = -tf.reduce_sum(answers*tf.log(tf.clip_by_value(al, 1e-10, 1.0))) / BATCH_SIZE
+tf.scalar_summary("adv_entropy", adv_entropy)
+adv_opt = tf.train.AdagradOptimizer(1e-2)
+adv_train_step = adv_opt.apply_gradients(normclip(adv_opt.compute_gradients(adv_entropy, var_list=[x for x in tf.trainable_variables() if "adv" in x.name])))
 
-def normclip(i):
-  return tf.clip_by_norm(i, 1.0)
 
-grads_and_vars = [ (-normclip(g)*tf.exp(-cross_entropy*cross_entropy/4),v) if "gen" in v.name else ((tf.constant([1.0]) - tf.exp(-cross_entropy*cross_entropy/4)) * normclip(g),v) for g, v in grads_and_vars]
+gen_entropy = -tf.reduce_sum((1.0-answers)*tf.log(tf.clip_by_value(al, 1e-10, 1.0))) / BATCH_SIZE
+tf.scalar_summary("gen_entropy", gen_entropy)
+gen_opt = tf.train.AdagradOptimizer(1e-1)
+gen_train_step = gen_opt.apply_gradients(normclip(gen_opt.compute_gradients(gen_entropy, var_list=[x for x in tf.trainable_variables() if "gen" in x.name])))
 
-# grads_and_vars is a list of tuples (gradient, variable).  Do whatever you
-# need to the 'gradient' part, for example cap them, etc.
-capped_grads_and_vars = grads_and_vars # 
 
-# Ask the optimizer to apply the capped gradients.
-train_step = opt.apply_gradients(capped_grads_and_vars)
-
-# another thinggy...
-# train_step = tf.train.AdagradOptimizer(3e-2).minimize(tf.reduce_mean(tf.square(l10-jpg)))
 
 saver = tf.train.Saver()
 
 plt.ion()
+
+grad_op = tf.gradients(gen_entropy, res)[0]*100
+print grad_op
 
 with tf.Session() as sess:
   testin = tf.truncated_normal([BATCH_SIZE, 128], dtype=tf.float32, stddev=1).eval()
@@ -136,17 +131,21 @@ with tf.Session() as sess:
      # l10, cross_entropy, train_step
      # ddd = [g for g,v in grads_and_vars];
      #ddd = [tf.log(al13)]
-     tr = sess.run([train_step])
+     tr = sess.run([adv_train_step, gen_train_step])
      
      if not (i%30):
-       summary_str, out, ce, gg = sess.run([merged_summary_op, res, cross_entropy, al], feed_dict={inp: testin})
+       summary_str, out, ae, ge, gg, dif = sess.run([merged_summary_op, res, adv_entropy, gen_entropy, al, grad_op], feed_dict={inp: testin})
        summary_writer.add_summary(summary_str, i)
 
        save_path = saver.save(sess, log_path+ "/model.ckpt")
 
-       print "entropy: " + str(ce)
        print gg
+       print "adv entropy: " + str(ae)
+       print "gen entropy: " + str(ge)
+       plt.subplot(1, 2, 1)
        plt.imshow((out[0,:,:,0:3]/3+0.5).clip(min=0, max=1))
+       plt.subplot(1, 2, 2)
+       plt.imshow((dif[0,:,:,0:3]/3+0.5).clip(min=0, max=1))
        plt.pause(0.1)
 
 
