@@ -27,30 +27,24 @@ def _conv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
     conv_counter += 1
     with tf.name_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
-        stddev = 1.3e-1
-        depthwise_filter = tf.Variable(tf.truncated_normal([kH, kW, nIn, 1],
+        stddev = 1.4e-2
+        kernel = tf.Variable(tf.truncated_normal([kH, kW, nIn, nOut],
                                                  dtype=tf.float32,
-                                                 stddev=(kH*kW)**0.5*stddev), name='weightsxy', trainable=True)
-                                                 
-        pointwise_filter = tf.Variable(tf.truncated_normal([1, 1, nIn, nOut],
-                                                 dtype=tf.float32,
-                                                 stddev=(nIn)**0.5*stddev), name='weightsc', trainable=True)
+                                                 stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
+        
+        conv = tf.nn.conv2d(inpOp, kernel, [1, 1, 1, 1],
+                         padding="SAME")
 
-        depthwise = tf.nn.depthwise_conv2d(inpOp, depthwise_filter, [1, dH, dW, 1],
-                                 padding="SAME", name="depthwise")
-        conv = tf.nn.conv2d(depthwise, pointwise_filter, [1, 1, 1, 1],
-                         padding="VALID", name="pointwise")
-                         
         biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
                              trainable=True, name='biases')
         bias = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
         if relu:
           bias = tf.nn.relu(bias, name=scope)
         #parameters += [kernel, biases]
-        #bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=name)
+        # bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=name)
         tf.histogram_summary(scope+"/output", bias)
         tf.image_summary(scope+"/output", bias[:,:,:,0:3])
-        tf.image_summary(scope+"/depth_weight", depthwise_filter)
+        tf.image_summary(scope+"/kernel_weight", tf.expand_dims(kernel[:,:,0:3,0], 0))
         # tf.image_summary(scope+"/point_weight", pointwise_filter)
         
         return bias
@@ -64,10 +58,10 @@ def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
     with tf.name_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
         in_shape = inpOp.get_shape()
-        stddev = 1.0e-2
+        stddev = 7e-3
         kernel = tf.Variable(tf.truncated_normal([kH, kW, nOut, nIn],
                                                  dtype=tf.float32,
-                                                 stddev=(kH*kW*nOut)**0.5*stddev), name='weights')
+                                                 stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
         
         conv = tf.nn.deconv2d(inpOp, kernel, [int(in_shape[0]),int(in_shape[1]),int(in_shape[2]),nOut], [1, 1, 1, 1],
                          padding="SAME")
@@ -85,6 +79,7 @@ def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
         # tf.image_summary(scope+"/point_weight", pointwise_filter)
         
         return bias
+
         
 fc_counter = 0
 def _fc(inpOp, nOut):
@@ -108,7 +103,7 @@ def _doubledim(inp, dim):
     #return tf.concat(dim, [a, b])
     
     b = tf.expand_dims(inp,dim+1)
-    c = tf.concat(dim+1, [b, b]) #*2, tf.zeros(b.get_shape())])
+    c = tf.concat(dim+1, [b, tf.zeros(b.get_shape())])
 
     #blur_kernel_size = [1,1,1,1]
     #blur_kernel_size[dim-1]=2
@@ -125,19 +120,46 @@ def _doubledim(inp, dim):
     c = tf.reshape(c, new_shape)
 
     
-    #kernel = tf.ones(blur_kernel_size)
-    #c = tf.nn.depthwise_conv2d(c, kernel, [1, 1, 1, 1],
-    #                     padding="SAME", name="pointwise")
     
     return c
+
+def _doublesh(inp):
+    with tf.name_scope("doublesh"):
+      a = _double(inp)
+      ndims = int(a.get_shape()[3])
+
+      kernel = tf.constant([[0.25, -0.5, 0.25], [-0.5, 1.0, -0.5], [0.25, -0.5, 0.25]])
+      kernel = tf.expand_dims(kernel,2)
+      kernel = tf.expand_dims(kernel,3)
+      kernel = tf.tile(kernel,[1,1,ndims,1])
+
+      #a =  tf.nn.depthwise_conv2d(a, kernel, [1, 1, 1, 1],
+      #                     padding="SAME", name="blur")
+      return a
+def _doublelp(inp):
+    with tf.name_scope("doublelp"):
+      a = _double(inp)
+      ndims = int(a.get_shape()[3])
+
+      kernel = tf.constant([[0.25, 0.5, 0.25], [0.5, 1.0, 0.5], [0.25, 0.5, 0.25]])
+      kernel = tf.expand_dims(kernel,2)
+      kernel = tf.expand_dims(kernel,3)
+      kernel = tf.tile(kernel,[1,1,ndims,1])
+
+      a =  tf.nn.depthwise_conv2d(a, kernel, [1, 1, 1, 1],
+                           padding="SAME", name="blur")
+      return a
+
 
 def _double(inp):
     with tf.name_scope("double"):
       a = _doubledim(inp, 1)
-      return _doubledim(a, 2)
+      a = _doubledim(a, 2)
+      
+      return a
 
 def _half(inpOp):
     shape = inpOp.get_shape()
-    #inpOp = tf.nn.dropout(inpOp, 0.5) * 0.5;
-    return tf.nn.max_pool(inpOp, [1,2,2,1], [1,2,2,1], 'SAME')
+    inpOp = tf.nn.dropout(inpOp, 0.5);
+    return tf.nn.avg_pool(inpOp, [1,2,2,1], [1,2,2,1], 'SAME')
 
