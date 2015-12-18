@@ -27,7 +27,7 @@ def _conv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
     conv_counter += 1
     with tf.name_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
-        stddev = 1.4e-2
+        stddev = 1.35e-2
         kernel = tf.Variable(tf.truncated_normal([kH, kW, nIn, nOut],
                                                  dtype=tf.float32,
                                                  stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
@@ -41,7 +41,7 @@ def _conv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
         if relu:
           bias = tf.nn.relu(bias, name=scope)
         #parameters += [kernel, biases]
-        # bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=name)
+        #bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=kernel.name)
         tf.histogram_summary(scope+"/output", bias)
         tf.image_summary(scope+"/output", bias[:,:,:,0:3])
         tf.image_summary(scope+"/kernel_weight", tf.expand_dims(kernel[:,:,0:3,0], 0))
@@ -58,7 +58,7 @@ def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
     with tf.name_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
         in_shape = inpOp.get_shape()
-        stddev = 7e-3
+        stddev = 4e-3
         kernel = tf.Variable(tf.truncated_normal([kH, kW, nOut, nIn],
                                                  dtype=tf.float32,
                                                  stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
@@ -72,7 +72,7 @@ def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
         if relu:
           bias = tf.nn.relu(bias, name=scope)
         #parameters += [kernel, biases]
-        #bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=name)
+        #bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=kernel.name)
         tf.histogram_summary(scope+"/output", bias)
         tf.image_summary(scope+"/output", bias[:,:,:,0:3])
         #tf.image_summary(scope+"/depth_weight", depthwise_filter)
@@ -92,7 +92,7 @@ def _fc(inpOp, nOut):
         nIn = int(reshaped.get_shape()[-1])
         kernel = tf.Variable(tf.truncated_normal([nIn, nOut],
                                                  dtype=tf.float32,
-                                                 stddev=1e-1), name='weights', trainable=True)
+                                                 stddev=nIn**0.5 * 4e-3), name='weights', trainable=True)
         b = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
                              trainable=True, name='biases')
         res = tf.matmul(reshaped, kernel) + b

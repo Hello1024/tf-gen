@@ -24,6 +24,7 @@ with tf.name_scope("gen") as scope:
   dou = tf.reshape(inp, [BATCH_SIZE, 4, 4, 8])
 
   l10 = utils._deconv(dou, 4, 4, 15)
+  l10 = utils._deconv(l10, 4, 4, 15)
   res = utils._deconv(l10, 1, 1, 3, relu=False)
   res = utils._doublelp(res)
   dou = utils._double(l10)
@@ -31,6 +32,7 @@ with tf.name_scope("gen") as scope:
   rand_l = tf.truncated_normal(res.get_shape(), dtype=tf.float32, stddev=1)
   dou = tf.concat(3, [rand_l, dou, res])
   l10 = utils._deconv(dou, 5, 5, 15)
+  l10 = utils._deconv(l10, 5, 5, 15)
   res = res + utils._deconv(l10, 1, 1, 3, relu=False)
   res = utils._doublelp(res)
   dou = utils._double(l10)
@@ -38,6 +40,7 @@ with tf.name_scope("gen") as scope:
   rand_l = tf.truncated_normal(res.get_shape(), dtype=tf.float32, stddev=1)
   dou = tf.concat(3, [rand_l, dou, res])
   l10 = utils._deconv(dou, 5, 5, 15)
+  l10 = utils._deconv(l10, 5, 5, 15)
   res = res + utils._deconv(l10, 1, 1, 3, relu=False)
   res = utils._doublelp(res)
   dou = utils._double(l10)
@@ -45,6 +48,7 @@ with tf.name_scope("gen") as scope:
   rand_l = tf.truncated_normal(res.get_shape(), dtype=tf.float32, stddev=1)
   dou = tf.concat(3, [rand_l, dou, res])
   l10 = utils._deconv(dou, 5, 5, 15)
+  l10 = utils._deconv(l10, 5, 5, 15)
   res = res + utils._deconv(l10, 1, 1, 3, relu=False)
   res = utils._doublelp(res)
   dou = utils._double(l10)
@@ -52,6 +56,7 @@ with tf.name_scope("gen") as scope:
   rand_l = tf.truncated_normal(res.get_shape(), dtype=tf.float32, stddev=1)
   dou = tf.concat(3, [rand_l, dou, res])
   l10 = utils._deconv(dou, 5, 5, 15)
+  l10 = utils._deconv(l10, 5, 5, 15)
   res = res + utils._deconv(l10, 1, 1, 3, relu=False)
   res = utils._doublelp(res)
   dou = utils._double(l10)
@@ -91,19 +96,19 @@ def normclip(grads_and_vars):
   #for g,v in grads_and_vars:
   #  print "G: " + str(g)
   #  print "V: " + str(v.name)
-  return grads_and_vars
+  #return grads_and_vars
   return [ (tf.clip_by_norm(g, 1.0),v) for g, v in grads_and_vars]
 
 
 adv_entropy = -tf.reduce_sum(answers*tf.log(tf.clip_by_value(al, 1e-10, 1.0))) / BATCH_SIZE
 tf.scalar_summary("adv_entropy", adv_entropy)
-adv_opt = tf.train.AdagradOptimizer(1e-2)
+adv_opt = tf.train.AdagradOptimizer(3e-3)
 adv_train_step = adv_opt.apply_gradients(normclip(adv_opt.compute_gradients(adv_entropy, var_list=[x for x in tf.trainable_variables() if "adv" in x.name])))
 
 
 gen_entropy = -tf.reduce_sum((1.0-answers)*tf.log(tf.clip_by_value(al, 1e-10, 1.0))) / BATCH_SIZE
 tf.scalar_summary("gen_entropy", gen_entropy)
-gen_opt = tf.train.AdagradOptimizer(1e-1)
+gen_opt = tf.train.AdagradOptimizer(3e-2)
 gen_train_step = gen_opt.apply_gradients(normclip(gen_opt.compute_gradients(gen_entropy, var_list=[x for x in tf.trainable_variables() if "gen" in x.name])))
 
 
@@ -131,7 +136,6 @@ with tf.Session() as sess:
      # l10, cross_entropy, train_step
      # ddd = [g for g,v in grads_and_vars];
      #ddd = [tf.log(al13)]
-     tr = sess.run([adv_train_step, gen_train_step])
      
      if not (i%30):
        summary_str, out, ae, ge, gg, dif = sess.run([merged_summary_op, res, adv_entropy, gen_entropy, al, grad_op], feed_dict={inp: testin})
@@ -149,6 +153,7 @@ with tf.Session() as sess:
        plt.pause(0.1)
 
 
+     sess.run([adv_train_step, gen_train_step])
      
      #for j in range(len(gv)):
      #  print "-----------------"
