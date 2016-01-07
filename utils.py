@@ -27,7 +27,7 @@ def _conv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
     conv_counter += 1
     with tf.name_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
-        stddev = 1.35e-2
+        stddev = 5e-3
         kernel = tf.Variable(tf.truncated_normal([kH, kW, nIn, nOut],
                                                  dtype=tf.float32,
                                                  stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
@@ -50,31 +50,29 @@ def _conv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
         return bias
 
 deconv_counter = 0
-def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True):
+def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True, name=None):
     global deconv_counter
     global parameters
-    name = 'conv' + str(deconv_counter)
+    if not name:
+      name = 'deconv' + str(deconv_counter)
     deconv_counter += 1
-    with tf.name_scope(name) as scope:
+    with tf.variable_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
         in_shape = inpOp.get_shape()
-        stddev = 4e-3
-        kernel = tf.Variable(tf.truncated_normal([kH, kW, nOut, nIn],
-                                                 dtype=tf.float32,
-                                                 stddev=(kH*kW*nIn)**0.5*stddev), name='weights')
+        stddev = 3e-3
+        kernel = tf.get_variable('weights',[kH, kW, nOut, nIn], initializer=tf.random_normal_initializer(stddev=(kH*kW*nIn)**0.5*stddev))
         
         conv = tf.nn.deconv2d(inpOp, kernel, [int(in_shape[0]),int(in_shape[1]),int(in_shape[2]),nOut], [1, 1, 1, 1],
                          padding="SAME")
                          
-        biases = tf.Variable(tf.constant(0.0, shape=[nOut], dtype=tf.float32),
-                             trainable=True, name='biases')
+        biases = tf.get_variable('biases', [nOut], initializer=tf.constant_initializer(value=0.0))
         bias = tf.reshape(tf.nn.bias_add(conv, biases), conv.get_shape())
         if relu:
-          bias = tf.nn.relu(bias, name=scope)
+          bias = tf.nn.relu(bias, name='relu')
         #parameters += [kernel, biases]
         #bias = tf.Print(bias, [tf.sqrt(tf.reduce_mean(tf.square(inpOp - tf.reduce_mean(inpOp))))], message=kernel.name)
-        tf.histogram_summary(scope+"/output", bias)
-        tf.image_summary(scope+"/output", bias[:,:,:,0:3])
+        tf.histogram_summary(bias.name+"/output", bias)
+        tf.image_summary(bias.name+"/output", bias[:,:,:,0:3])
         #tf.image_summary(scope+"/depth_weight", depthwise_filter)
         # tf.image_summary(scope+"/point_weight", pointwise_filter)
         
@@ -160,6 +158,6 @@ def _double(inp):
 
 def _half(inpOp):
     shape = inpOp.get_shape()
-    inpOp = tf.nn.dropout(inpOp, 0.5);
+    #inpOp = tf.nn.dropout(inpOp, 0.5);
     return tf.nn.avg_pool(inpOp, [1,2,2,1], [1,2,2,1], 'SAME')
 

@@ -1,6 +1,7 @@
 import tensorflow as tf
 import utils
 import time
+import sys
 from datetime import datetime
 import matplotlib.pyplot as plt
 
@@ -131,8 +132,13 @@ with tf.Session() as sess:
   sess.run(init)
   print "variables initialized"
 
+  if sys.argv[1]:
+    saver.restore(sess, sys.argv[1])
+
+
+  ae=1.0
+
   for i in range(1000000):
-     print i
      # l10, cross_entropy, train_step
      # ddd = [g for g,v in grads_and_vars];
      #ddd = [tf.log(al13)]
@@ -153,7 +159,14 @@ with tf.Session() as sess:
        plt.pause(0.1)
 
 
-     sess.run([adv_train_step, gen_train_step])
+     if ae < 0.5:
+       chosen_step = gen_train_step
+     else:
+       chosen_step = adv_train_step
+     ae = sess.run([adv_entropy, chosen_step])
+     ae = ae[0]
+     print i, ae
+
      
      #for j in range(len(gv)):
      #  print "-----------------"
