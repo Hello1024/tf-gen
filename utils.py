@@ -59,7 +59,7 @@ def _deconv(inpOp, kH, kW, nOut, dH=1, dW=1, relu=True, name=None):
     with tf.variable_scope(name) as scope:
         nIn = int(inpOp.get_shape()[-1])
         in_shape = inpOp.get_shape()
-        stddev = 3e-3
+        stddev = 1e-3
         kernel = tf.get_variable('weights',[kH, kW, nOut, nIn], initializer=tf.random_normal_initializer(stddev=(kH*kW*nIn)**0.5*stddev))
         
         conv = tf.nn.deconv2d(inpOp, kernel, [int(in_shape[0]),int(in_shape[1]),int(in_shape[2]),nOut], [1, 1, 1, 1],
